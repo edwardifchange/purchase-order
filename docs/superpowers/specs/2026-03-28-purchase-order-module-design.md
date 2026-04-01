@@ -22,7 +22,7 @@
 | supplier_name | varchar(100) | 供应商名称 |
 | order_date | date | 订单日期 |
 | total_amount | decimal(12,2) | 总金额 |
-| status | tinyint | 状态：1-待审批 2-已审批 3-已完成 4-已取消 |
+| status | tinyint | 状态：1-待审批 2-已审批 3-已完成 4-已取消 5-已结算 6-已到货 |
 | created_at | datetime | 创建时间 |
 | updated_at | datetime | 更新时间 |
 

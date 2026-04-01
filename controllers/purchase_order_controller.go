@@ -73,7 +73,7 @@ func (c *PurchaseOrderController) GetList(ctx *gin.Context) {
 	if statusStr := ctx.Query("status"); statusStr != "" {
 		status := int8(parseInt(statusStr))
 		// 校验 status 是否在有效范围内
-		if status >= 1 && status <= 5 {
+		if status >= 1 && status <= 6 {
 			query.Status = &status
 		}
 	}

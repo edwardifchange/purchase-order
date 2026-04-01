@@ -59,6 +59,7 @@ The system uses GORM with automatic migrations. The PurchaseOrder model includes
 - StatusCompleted = 3 (已完成)
 - StatusCancelled = 4 (已取消)
 - StatusSettled = 5 (已结算)
+- StatusDelivered = 6 (已到货)
 
 ## Common Development Commands
 
@@ -179,7 +180,7 @@ Controller-level validation in [controllers/purchase_order_controller.go](contro
       "created_at": true, "updated_at": true,
   }
   ```
-- **Status values**: Must be between 1-5 (inclusive)
+- **Status values**: Must be between 1-6 (inclusive)
 - **Order direction**: Only "asc" or "desc" allowed
 
 When adding new endpoints with sorting, maintain the same whitelist pattern for security.
@@ -199,7 +200,7 @@ The `purchase_orders` table includes:
 - supplier_name (varchar(100), not null)
 - order_date (date, not null)
 - total_amount (decimal(12,2), not null)
-- status (tinyint, not null, default 1) - 1:待审批 2:已审批 3:已完成 4:已取消 5:已结算
+- status (tinyint, not null, default 1) - 1:待审批 2:已审批 3:已完成 4:已取消 5:已结算 6:已到货
 - created_at, updated_at (datetime, auto managed)
 
 ### Status Constants
@@ -212,5 +213,6 @@ const (
     StatusCompleted int8 = 3 // 已完成
     StatusCancelled int8 = 4 // 已取消
     StatusSettled   int8 = 5 // 已结算
+    StatusDelivered int8 = 6 // 已到货
 )
 ```

@@ -160,6 +160,8 @@ const (
 	StatusApproved  int8 = 2 // 已审批
 	StatusCompleted int8 = 3 // 已完成
 	StatusCancelled int8 = 4 // 已取消
+	StatusSettled   int8 = 5 // 已结算
+	StatusDelivered int8 = 6 // 已到货
 )
 ```
 
