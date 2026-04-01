@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"purchase-order/config"
 	"purchase-order/routers"
@@ -10,11 +11,11 @@ import (
 func main() {
 	// 初始化数据库
 	cfg := config.DatabaseConfig{
-		Host:     "localhost",
+		Host:     getEnv("DB_HOST", "localhost"),
 		Port:     3306,
-		User:     "root",
-		Password: "123456",
-		DBName:   "purchase_order_db",
+		User:     getEnv("DB_USER", "root"),
+		Password: getEnv("DB_PASSWORD", ""),
+		DBName:   getEnv("DB_NAME", "purchase_order_db"),
 	}
 
 	if err := config.InitDatabase(cfg); err != nil {
@@ -29,4 +30,12 @@ func main() {
 	if err := r.Run(":8080"); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
+}
+
+// getEnv 获取环境变量，如果不存在则返回默认值
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }

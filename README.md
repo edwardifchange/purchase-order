@@ -87,12 +87,29 @@ CREATE DATABASE purchase_order_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_
 
 ```go
 cfg := config.DatabaseConfig{
-    Host:     "localhost",  // MySQL 主机地址
-    Port:     3306,         // MySQL 端口
-    User:     "root",       // MySQL 用户名
-    Password: "123456",     // MySQL 密码
-    DBName:   "purchase_order_db",  // 数据库名
+    Host:     "localhost",       // MySQL 主机地址
+    Port:     3306,              // MySQL 端口
+    User:     "root",            // MySQL 用户名
+    Password: os.Getenv("DB_PASSWORD"),  // MySQL 密码（从环境变量读取）
+    DBName:   "purchase_order_db",      // 数据库名
 }
+```
+
+**设置环境变量：**
+
+Windows (PowerShell):
+```powershell
+$env:DB_PASSWORD="your_password"
+```
+
+Windows (CMD):
+```cmd
+set DB_PASSWORD=your_password
+```
+
+Linux/Mac:
+```bash
+export DB_PASSWORD="your_password"
 ```
 
 ### 3. 安装依赖
