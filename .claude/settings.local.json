@@ -20,7 +20,8 @@
       "Bash(sed -i '172s/^\\\\t\\\\t\\\\t/\\\\t\\\\t/' controllers/purchase_order_controller.go)",
       "Bash(sed -i '173s/^\\\\t\\\\t\\\\t/\\\\t\\\\t/' controllers/purchase_order_controller.go)",
       "Bash(sed -i '174s/^\\\\t\\\\t\\\\t/\\\\t\\\\t/' controllers/purchase_order_controller.go)",
-      "Bash(sed -i '175s/^\\\\t\\\\t\\\\t/\\\\t\\\\t/' controllers/purchase_order_controller.go)"
+      "Bash(sed -i '175s/^\\\\t\\\\t\\\\t/\\\\t\\\\t/' controllers/purchase_order_controller.go)",
+      "Bash(go get:*)"
     ]
   }
 }
