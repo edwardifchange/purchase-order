@@ -31,6 +31,10 @@ func (s *purchaseOrderServiceStub) GetByID(id uint64) (*models.PurchaseOrder, er
 	return &models.PurchaseOrder{ID: id}, nil
 }
 
+func (s *purchaseOrderServiceStub) Create(order models.PurchaseOrder) (*models.PurchaseOrder, error) {
+	return &order, nil
+}
+
 func TestGetListAllowsDeliveredStatus(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

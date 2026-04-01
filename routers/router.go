@@ -26,6 +26,7 @@ func SetupRouter() *gin.Engine {
 		{
 			purchaseOrders.GET("", purchaseOrderController.GetList)
 			purchaseOrders.GET("/:poId", purchaseOrderController.GetByID)
+			purchaseOrders.POST("", purchaseOrderController.Create)
 		}
 
 		// 测试接口

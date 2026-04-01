@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find . -name *.cursorrules -o -name .cursorrules -o -path */.cursor/rules/* -o -path */.github/copilot-instructions.md)",
+      "Bash(go mod:*)",
+      "Bash(go version:*)",
+      "Bash(env)",
+      "Bash(go run:*)",
+      "Bash(ll:*)",
+      "Bash(claude mcp:*)",
+      "Bash(git:*)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go fmt:*)",
+      "Bash(go vet:*)",
+      "Bash(cd:*)",
+      "Bash(sed -i '167s/^t\\\\t/\\\\t/' controllers/purchase_order_controller.go)",
+      "Bash(sed -i '168,176s/^\\\\t\\\\t\\\\t/\\\\t\\\\t/' controllers/purchase_order_controller.go)",
+      "Bash(sed -i '171s/^\\\\t\\\\t\\\\t/\\\\t\\\\t/' controllers/purchase_order_controller.go)",
+      "Bash(sed -i '172s/^\\\\t\\\\t\\\\t/\\\\t\\\\t/' controllers/purchase_order_controller.go)",
+      "Bash(sed -i '173s/^\\\\t\\\\t\\\\t/\\\\t\\\\t/' controllers/purchase_order_controller.go)",
+      "Bash(sed -i '174s/^\\\\t\\\\t\\\\t/\\\\t\\\\t/' controllers/purchase_order_controller.go)",
+      "Bash(sed -i '175s/^\\\\t\\\\t\\\\t/\\\\t\\\\t/' controllers/purchase_order_controller.go)"
+    ]
+  }
+}

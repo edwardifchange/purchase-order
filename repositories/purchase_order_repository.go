@@ -9,6 +9,8 @@ import (
 type PurchaseOrderRepository interface {
 	FindAll(query ListQuery) ([]models.PurchaseOrder, int64, error)
 	FindByID(id uint64) (*models.PurchaseOrder, error)
+	GetMaxOrderNoByDate(dateStr string) (string, error)
+	Create(order *models.PurchaseOrder) error
 }
 
 type ListQuery struct {
@@ -82,4 +84,33 @@ func (r *purchaseOrderRepository) FindByID(id uint64) (*models.PurchaseOrder, er
 		return nil, err
 	}
 	return &order, nil
+}
+
+// GetMaxOrderNoByDate 获取指定日期的最大订单号
+// dateStr: 日期字符串，格式为 YYYYMMDD (例如: "20260401")
+// 返回: 最大订单号，如果该日期没有订单则返回空字符串 (无错误)
+// 错误: 仅在数据库查询出错时返回错误
+func (r *purchaseOrderRepository) GetMaxOrderNoByDate(dateStr string) (string, error) {
+	var maxOrderNo string
+	prefix := "PO" + dateStr
+
+	err := r.db.Model(&models.PurchaseOrder{}).
+		Where("order_no LIKE ?", prefix+"%").
+		Order("order_no DESC").
+		Select("order_no").
+		First(&maxOrderNo).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return "", nil // No orders for this date yet
+		}
+		return "", err
+	}
+
+	return maxOrderNo, nil
+}
+
+// Create 创建采购订单记录
+func (r *purchaseOrderRepository) Create(order *models.PurchaseOrder) error {
+	return r.db.Create(order).Error
 }
