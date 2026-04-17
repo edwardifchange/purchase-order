@@ -1,54 +1,43 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"purchase-order/models"
 	"purchase-order/repositories"
 
 	"gorm.io/gorm"
 )
 
-const seqSuffixLength = 4
-const maxCreateRetries = 3
+const (
+	seqSuffixLength = 4
+	maxCreateRetries = 5
+	defaultRetryDelay = 10 * time.Millisecond
+)
 
-// generateOrderNo 生成采购订单号
-// 格式: PO + YYYYMMDD + 4位序号 (例如: PO202604010001)
-// 参数: date - 订单日期, repo - 仓库实例
-// 返回: 生成的订单号, 错误信息
-func generateOrderNo(date time.Time, repo repositories.PurchaseOrderRepository) (string, error) {
-	dateStr := date.Format("20060102")
-	prefix := "PO" + dateStr
+// 业务错误定义
+var (
+	ErrOrderDateRequired  = errors.New("订单日期不能为空")
+	ErrInvalidStatus      = errors.New("状态值必须在1-6之间")
+	ErrAmountTooSmall     = errors.New("金额必须大于0")
+	ErrConcurrentConflict = errors.New("系统繁忙，请稍后重试")
+	ErrOrderNotFound      = errors.New("采购订单不存在")
+)
 
-	maxOrderNo, err := repo.GetMaxOrderNoByDate(dateStr)
-	if err != nil && err != gorm.ErrRecordNotFound {
-		return "", err
-	}
-
-	seq := 1
-	if maxOrderNo != "" {
-		seqStr := maxOrderNo[len(maxOrderNo)-seqSuffixLength:]
-		s, err := strconv.Atoi(seqStr)
-		if err != nil {
-			return "", errors.New("解析订单号序号失败")
-		}
-		seq = s + 1
-	}
-
-	orderNo := fmt.Sprintf("%s%04d", prefix, seq)
-	return orderNo, nil
-}
-
+// PurchaseOrderService 采购订单服务接口
 type PurchaseOrderService interface {
-	GetList(query repositories.ListQuery) (*ListResult, error)
-	GetByID(id uint64) (*models.PurchaseOrder, error)
-	Create(order models.PurchaseOrder) (*models.PurchaseOrder, error)
+	GetList(ctx context.Context, query repositories.ListQuery) (*ListResult, error)
+	GetByID(ctx context.Context, id uint64) (*models.PurchaseOrder, error)
+	Create(ctx context.Context, order models.PurchaseOrder) (*models.PurchaseOrder, error)
 }
 
+// ListResult 列表结果
 type ListResult struct {
 	List     []models.PurchaseOrder
 	Total    int64
@@ -60,11 +49,13 @@ type purchaseOrderService struct {
 	repo repositories.PurchaseOrderRepository
 }
 
+// NewPurchaseOrderService 创建采购订单服务
 func NewPurchaseOrderService(repo repositories.PurchaseOrderRepository) PurchaseOrderService {
 	return &purchaseOrderService{repo: repo}
 }
 
-func (s *purchaseOrderService) GetList(query repositories.ListQuery) (*ListResult, error) {
+// GetList 获取采购订单列表
+func (s *purchaseOrderService) GetList(ctx context.Context, query repositories.ListQuery) (*ListResult, error) {
 	// 设置默认值
 	if query.Page <= 0 {
 		query.Page = 1
@@ -79,7 +70,7 @@ func (s *purchaseOrderService) GetList(query repositories.ListQuery) (*ListResul
 		query.Order = "asc"
 	}
 
-	orders, total, err := s.repo.FindAll(query)
+	orders, total, err := s.repo.FindAll(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -92,11 +83,12 @@ func (s *purchaseOrderService) GetList(query repositories.ListQuery) (*ListResul
 	}, nil
 }
 
-func (s *purchaseOrderService) GetByID(id uint64) (*models.PurchaseOrder, error) {
-	order, err := s.repo.FindByID(id)
+// GetByID 根据ID获取采购订单
+func (s *purchaseOrderService) GetByID(ctx context.Context, id uint64) (*models.PurchaseOrder, error) {
+	order, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("采购订单不存在")
+			return nil, ErrOrderNotFound
 		}
 		return nil, err
 	}
@@ -104,52 +96,103 @@ func (s *purchaseOrderService) GetByID(id uint64) (*models.PurchaseOrder, error)
 }
 
 // Create 创建采购订单
-// 自动生成订单号并保存到数据库
-// 参数: order - 采购订单对象 (OrderNo 会自动生成,不需要传入)
-// 返回: 创建后的采购订单指针, 错误信息
-func (s *purchaseOrderService) Create(order models.PurchaseOrder) (*models.PurchaseOrder, error) {
-	// Validate OrderDate is provided
-	if order.OrderDate.IsZero() {
-		return nil, errors.New("订单日期不能为空")
+func (s *purchaseOrderService) Create(ctx context.Context, order models.PurchaseOrder) (*models.PurchaseOrder, error) {
+	// 验证订单
+	if err := s.validateOrder(order); err != nil {
+		return nil, err
 	}
 
-	// Set default status if not provided
+	// 重试机制
+	var result *models.PurchaseOrder
+	var lastErr error
+
+	for attempt := 0; attempt < maxCreateRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(defaultRetryDelay)
+		}
+
+		// 生成订单号
+		orderNo, err := s.generateOrderNo(ctx, order.OrderDate)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		order.OrderNo = orderNo
+
+		// 创建订单
+		if err := s.repo.Create(ctx, &order); err != nil {
+			if s.isDuplicateKeyError(err) {
+				lastErr = err
+				continue // 并发冲突，重试
+			}
+			return nil, err
+		}
+
+		result = &order
+		return result, nil
+	}
+
+	// 所有重试都失败
+	if s.isDuplicateKeyError(lastErr) {
+		return nil, ErrConcurrentConflict
+	}
+	return nil, lastErr
+}
+
+// validateOrder 验证订单数据
+func (s *purchaseOrderService) validateOrder(order models.PurchaseOrder) error {
+	if order.OrderDate.IsZero() {
+		return ErrOrderDateRequired
+	}
+
+	// 设置默认状态
 	if order.Status == 0 {
 		order.Status = models.StatusPending
 	}
 
-	// Validate status range
-	if order.Status < 1 || order.Status > 6 {
-		return nil, errors.New("状态值必须在1-6之间")
+	// 验证状态
+	if !models.IsValidStatus(order.Status) {
+		return ErrInvalidStatus
 	}
 
-	// Retry loop for handling concurrent order number conflicts
-	for attempt := 0; attempt < maxCreateRetries; attempt++ {
-		// Generate order number
-		orderNo, err := generateOrderNo(order.OrderDate, s.repo)
+	// 验证金额
+	if order.TotalAmount.LessThanOrEqual(decimal.Zero) {
+		return ErrAmountTooSmall
+	}
+
+	return nil
+}
+
+// generateOrderNo 生成订单号
+func (s *purchaseOrderService) generateOrderNo(ctx context.Context, date time.Time) (string, error) {
+	dateStr := date.Format("20060102")
+	prefix := "PO" + dateStr
+
+	maxOrderNo, err := s.repo.GetMaxOrderNoByDate(ctx, dateStr)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", err
+	}
+
+	seq := 1
+	if maxOrderNo != "" {
+		seqStr := maxOrderNo[len(maxOrderNo)-seqSuffixLength:]
+		s, err := strconv.Atoi(seqStr)
 		if err != nil {
-			return nil, err
+			return "", errors.New("解析订单号序号失败")
 		}
-		order.OrderNo = orderNo
-
-		// Create in database
-		err = s.repo.Create(&order)
-		if err == nil {
-			// Success - return the created order
-			return &order, nil
-		}
-
-		// Check if error is duplicate key (concurrent conflict)
-		// MySQL duplicate key error typically contains "Duplicate entry"
-		if strings.Contains(err.Error(), "Duplicate entry") || strings.Contains(err.Error(), "duplicate key") {
-			// Conflict detected - retry and generate new order number
-			continue
-		}
-
-		// Other error - don't retry
-		return nil, err
+		seq = s + 1
 	}
 
-	// All retries exhausted
-	return nil, errors.New("创建订单失败：并发冲突，请稍后重试")
+	return fmt.Sprintf("%s%04d", prefix, seq), nil
+}
+
+// isDuplicateKeyError 判断是否为重复键错误
+func (s *purchaseOrderService) isDuplicateKeyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "Duplicate entry") ||
+		strings.Contains(errStr, "duplicate key") ||
+		strings.Contains(errStr, "UNIQUE constraint failed")
 }

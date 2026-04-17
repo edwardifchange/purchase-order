@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	"purchase-order/config"
@@ -17,11 +18,15 @@ func main() {
 
 	// 初始化数据库
 	cfg := config.DatabaseConfig{
-		Host:     getEnv("DB_HOST", "localhost"),
-		Port:     3306,
-		User:     getEnv("DB_USER", "root"),
-		Password: getEnv("DB_PASSWORD", ""),
-		DBName:   getEnv("DB_NAME", "purchase_order_db"),
+		Host:         getEnv("DB_HOST", "localhost"),
+		Port:         3306,
+		User:         getEnv("DB_USER", "root"),
+		Password:     getEnv("DB_PASSWORD", ""),
+		DBName:       getEnv("DB_NAME", "purchase_order_db"),
+		LogMode:      getEnv("DB_LOG_MODE", "info"),
+		MaxIdleConns: 10,
+		MaxOpenConns: 100,
+		MaxLifetime:  time.Hour,
 	}
 
 	if err := config.InitDatabase(cfg); err != nil {
@@ -32,8 +37,9 @@ func main() {
 	r := routers.SetupRouter()
 
 	// 启动服务
-	log.Println("Server starting on :8080")
-	if err := r.Run(":8080"); err != nil {
+	port := getEnv("SERVER_PORT", "8080")
+	log.Printf("Server starting on :%s", port)
+	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
