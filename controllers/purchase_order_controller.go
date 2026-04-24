@@ -61,7 +61,7 @@ func NewPurchaseOrderController(service services.PurchaseOrderService) *Purchase
 // GetList 获取采购订单列表
 func (c *PurchaseOrderController) GetList(ctx *gin.Context) {
 	// 设置超时上下文
-	reqCtx, cancel := context.WithTimeout(context.Background(), defaultRequestTimeout)
+	reqCtx, cancel := context.WithTimeout(ctx.Request.Context(), defaultRequestTimeout)
 	defer cancel()
 
 	// 解析并验证参数
@@ -91,7 +91,7 @@ func (c *PurchaseOrderController) GetByID(ctx *gin.Context) {
 	}
 
 	// 设置超时上下文
-	reqCtx, cancel := context.WithTimeout(context.Background(), defaultRequestTimeout)
+	reqCtx, cancel := context.WithTimeout(ctx.Request.Context(), defaultRequestTimeout)
 	defer cancel()
 
 	order, err := c.service.GetByID(reqCtx, id)
@@ -125,7 +125,7 @@ func (c *PurchaseOrderController) Create(ctx *gin.Context) {
 	}
 
 	// 设置超时上下文
-	reqCtx, cancel := context.WithTimeout(context.Background(), defaultRequestTimeout)
+	reqCtx, cancel := context.WithTimeout(ctx.Request.Context(), defaultRequestTimeout)
 	defer cancel()
 
 	// 调用服务
@@ -140,11 +140,13 @@ func (c *PurchaseOrderController) Create(ctx *gin.Context) {
 
 // validateCreateRequest 验证创建请求
 func (c *PurchaseOrderController) validateCreateRequest(req *CreateRequest) error {
+	supplierName := strings.TrimSpace(req.SupplierName)
+
 	// 验证供应商名称
-	if strings.TrimSpace(req.SupplierName) == "" {
+	if supplierName == "" {
 		return errors.New("供应商名称不能为空")
 	}
-	if len([]rune(req.SupplierName)) > 100 {
+	if len([]rune(supplierName)) > 100 {
 		return errors.New("供应商名称最多100字符")
 	}
 
@@ -190,7 +192,7 @@ func (c *PurchaseOrderController) buildOrderFromRequest(req *CreateRequest) (*mo
 	}
 
 	return &models.PurchaseOrder{
-		SupplierName: req.SupplierName,
+		SupplierName: strings.TrimSpace(req.SupplierName),
 		OrderDate:    orderDate,
 		TotalAmount:  totalAmount,
 		Status:       status,
@@ -199,24 +201,24 @@ func (c *PurchaseOrderController) buildOrderFromRequest(req *CreateRequest) (*mo
 
 // parseListQuery 解析列表查询参数
 func (c *PurchaseOrderController) parseListQuery(ctx *gin.Context) (repositories.ListQuery, error) {
-	page := parseInt(ctx.DefaultQuery("page", "1"))
-	pageSize := parseInt(ctx.DefaultQuery("page_size", "10"))
-
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 10
+	page, err := parsePositiveIntQuery(ctx, "page", 1)
+	if err != nil {
+		return repositories.ListQuery{}, err
 	}
 
-	orderBy := ctx.DefaultQuery("order_by", "id")
-	if !isAllowedOrderByField(orderBy) {
-		orderBy = "id"
+	pageSize, err := parsePageSizeQuery(ctx, "page_size", 10, 100)
+	if err != nil {
+		return repositories.ListQuery{}, err
 	}
 
-	order := strings.ToLower(ctx.DefaultQuery("order", "asc"))
-	if order != "asc" && order != "desc" {
-		order = "asc"
+	orderBy, err := parseOrderByQuery(ctx, "order_by", "id")
+	if err != nil {
+		return repositories.ListQuery{}, err
+	}
+
+	order, err := parseOrderQuery(ctx, "order", "asc")
+	if err != nil {
+		return repositories.ListQuery{}, err
 	}
 
 	query := repositories.ListQuery{
@@ -231,10 +233,15 @@ func (c *PurchaseOrderController) parseListQuery(ctx *gin.Context) (repositories
 	}
 
 	if statusStr := ctx.Query("status"); statusStr != "" {
-		status := int8(parseInt(statusStr))
-		if models.IsValidStatus(status) {
-			query.Status = &status
+		statusInt, err := strconv.Atoi(statusStr)
+		if err != nil {
+			return repositories.ListQuery{}, errors.New("status参数必须是数字")
 		}
+		status := int8(statusInt)
+		if !models.IsValidStatus(status) {
+			return repositories.ListQuery{}, errors.New("status参数必须在1-6之间")
+		}
+		query.Status = &status
 	}
 
 	return query, nil
@@ -252,16 +259,57 @@ func (c *PurchaseOrderController) handleError(ctx *gin.Context, err error) {
 	}
 }
 
-// parseInt 解析整数
-func parseInt(s string) int {
-	val, err := strconv.Atoi(s)
-	if err != nil {
-		return 0
-	}
-	return val
-}
-
 // isAllowedOrderByField 检查是否为允许的排序字段
 func isAllowedOrderByField(field string) bool {
 	return allowedOrderByFields[field]
+}
+
+// parsePositiveIntQuery 解析正整数查询参数
+func parsePositiveIntQuery(ctx *gin.Context, key string, defaultValue int) (int, error) {
+	raw := ctx.Query(key)
+	if raw == "" {
+		return defaultValue, nil
+	}
+
+	val, err := strconv.Atoi(raw)
+	if err != nil || val < 1 {
+		return 0, errors.New(key + "参数必须是大于0的整数")
+	}
+
+	return val, nil
+}
+
+// parsePageSizeQuery 解析分页大小参数
+func parsePageSizeQuery(ctx *gin.Context, key string, defaultValue, maxValue int) (int, error) {
+	raw := ctx.Query(key)
+	if raw == "" {
+		return defaultValue, nil
+	}
+
+	val, err := strconv.Atoi(raw)
+	if err != nil || val < 1 || val > maxValue {
+		return 0, errors.New(key + "参数必须在1-" + strconv.Itoa(maxValue) + "之间")
+	}
+
+	return val, nil
+}
+
+// parseOrderByQuery 解析排序字段参数
+func parseOrderByQuery(ctx *gin.Context, key string, defaultValue string) (string, error) {
+	value := ctx.DefaultQuery(key, defaultValue)
+	if !isAllowedOrderByField(value) {
+		return "", errors.New(key + "参数不合法")
+	}
+
+	return value, nil
+}
+
+// parseOrderQuery 解析排序方向参数
+func parseOrderQuery(ctx *gin.Context, key string, defaultValue string) (string, error) {
+	value := strings.ToLower(ctx.DefaultQuery(key, defaultValue))
+	if value != "asc" && value != "desc" {
+		return "", errors.New(key + "参数必须是asc或desc")
+	}
+
+	return value, nil
 }
